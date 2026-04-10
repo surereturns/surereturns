@@ -1,0 +1,100 @@
+const express = require('express');
+const router = express.Router();
+const { auth } = require('../middleware/auth');
+const User = require('../models/User');
+const Transaction = require('../models/Transaction');
+
+router.get('/profile', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select('-password');
+    res.json(user);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+router.get('/dashboard', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select('-password');
+    
+    const recentTransactions = await Transaction.find({ user: req.user.id })
+      .sort({ createdAt: -1 })
+      .limit(10);
+
+    const totalInvested = user.activeInvestments.reduce((sum, inv) => sum + inv.amount, 0);
+    
+    const estimatedReturns = user.activeInvestments.reduce((sum, inv) => {
+      const daysActive = Math.floor((Date.now() - new Date(inv.startDate)) / (1000 * 60 * 60 * 24));
+      return sum + (inv.amount * (inv.dailyReturn / 100) * daysActive);
+    }, 0);
+
+    res.json({
+      balance: user.balance,
+      totalInvested,
+      estimatedReturns: parseFloat(estimatedReturns.toFixed(2)),
+      activeInvestments: user.activeInvestments,
+      recentTransactions,
+      depositHistory: user.depositHistory
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+router.post('/invest', auth, async (req, res) => {
+  try {
+    const { planId, amount } = req.body;
+    const user = await User.findById(req.user.id);
+
+    if (amount > user.balance) {
+      return res.status(400).json({ message: 'Insufficient balance' });
+    }
+
+    const Plan = require('../models/Plan');
+    const plan = await Plan.findById(planId);
+    
+    if (!plan) {
+      return res.status(404).json({ message: 'Plan not found' });
+    }
+
+    if (amount < plan.minimumAmount) {
+      return res.status(400).json({ message: `Minimum investment is $${plan.minimumAmount}` });
+    }
+
+    user.balance -= amount;
+
+    const endDate = new Date();
+    endDate.setDate(endDate.getDate() + plan.duration);
+
+    user.activeInvestments.push({
+      planId: plan._id,
+      amount,
+      startDate: new Date(),
+      endDate,
+      dailyReturn: plan.dailyReturn
+    });
+
+    await user.save();
+
+    await Transaction.create({
+      user: user._id,
+      type: 'investment',
+      amount,
+      status: 'completed',
+      description: `Investment in ${plan.name}`
+    });
+
+    res.json({ 
+      message: 'Investment created successfully',
+      balance: user.balance,
+      investment: user.activeInvestments[user.activeInvestments.length - 1]
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+module.exports = router;

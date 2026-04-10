@@ -1,0 +1,119 @@
+const express = require('express');
+const router = express.Router();
+const { auth, adminOnly } = require('../middleware/auth');
+const User = require('../models/User');
+const Transaction = require('../models/Transaction');
+const Plan = require('../models/Plan');
+
+router.get('/stats', auth, adminOnly, async (req, res) => {
+  try {
+    const totalUsers = await User.countDocuments({ role: 'user' });
+    const totalDeposits = await Transaction.aggregate([
+      { $match: { type: 'deposit', status: 'completed' } },
+      { $group: { _id: null, total: { $sum: '$amount' } } }
+    ]);
+    const totalInvestments = await Transaction.aggregate([
+      { $match: { type: 'investment' } },
+      { $group: { _id: null, total: { $sum: '$amount' } } }
+    ]);
+    const pendingTransactions = await Transaction.countDocuments({ status: 'pending' });
+
+    res.json({
+      totalUsers,
+      totalDeposits: totalDeposits[0]?.total || 0,
+      totalInvestments: totalInvestments[0]?.total || 0,
+      pendingTransactions
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+router.get('/users', auth, adminOnly, async (req, res) => {
+  try {
+    const users = await User.find({ role: 'user' })
+      .select('-password')
+      .sort({ createdAt: -1 });
+    res.json(users);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+router.get('/transactions', auth, adminOnly, async (req, res) => {
+  try {
+    const transactions = await Transaction.find()
+      .populate('user', 'email firstName lastName')
+      .sort({ createdAt: -1 });
+    res.json(transactions);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+router.put('/transactions/:id', auth, adminOnly, async (req, res) => {
+  try {
+    const { status } = req.body;
+    const transaction = await Transaction.findById(req.params.id);
+    
+    if (!transaction) {
+      return res.status(404).json({ message: 'Transaction not found' });
+    }
+
+    transaction.status = status;
+    transaction.processedBy = req.user.id;
+    await transaction.save();
+
+    if (status === 'approved' && transaction.type === 'deposit') {
+      await User.findByIdAndUpdate(transaction.user, {
+        $inc: { balance: transaction.amount }
+      });
+    }
+
+    res.json(transaction);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+router.put('/users/:id/balance', auth, adminOnly, async (req, res) => {
+  try {
+    const { amount, type } = req.body;
+    const user = await User.findById(req.params.id);
+    
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    if (type === 'add') {
+      user.balance += amount;
+    } else if (type === 'subtract') {
+      if (user.balance < amount) {
+        return res.status(400).json({ message: 'Insufficient balance' });
+      }
+      user.balance -= amount;
+    }
+
+    await user.save();
+
+    await Transaction.create({
+      user: user._id,
+      type: type === 'add' ? 'deposit' : 'withdrawal',
+      amount,
+      status: 'completed',
+      description: `Manual ${type} by admin`,
+      processedBy: req.user.id
+    });
+
+    res.json({ balance: user.balance });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+module.exports = router;

@@ -1,0 +1,379 @@
+import React, { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
+import { 
+  Users, 
+  DollarSign, 
+  TrendingUp, 
+  Shield,
+  CheckCircle2,
+  XCircle,
+  AlertCircle,
+  RefreshCw,
+  Edit3,
+  Save,
+  X
+} from 'lucide-react';
+import axios from 'axios';
+import { toast } from 'react-toastify';
+
+const Admin = () => {
+  const [activeTab, setActiveTab] = useState('overview');
+  const [stats, setStats] = useState(null);
+  const [users, setUsers] = useState([]);
+  const [transactions, setTransactions] = useState([]);
+  const [plans, setPlans] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [editingPlan, setEditingPlan] = useState(null);
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    try {
+      const [statsRes, usersRes, transactionsRes, plansRes] = await Promise.all([
+        axios.get('/api/admin/stats'),
+        axios.get('/api/admin/users'),
+        axios.get('/api/admin/transactions'),
+        axios.get('/api/plans')
+      ]);
+
+      setStats(statsRes.data);
+      setUsers(usersRes.data);
+      setTransactions(transactionsRes.data);
+      setPlans(plansRes.data);
+    } catch (error) {
+      toast.error('Failed to load admin data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleApproveTransaction = async (id) => {
+    try {
+      await axios.put(`/api/admin/transactions/${id}`, { status: 'approved' });
+      toast.success('Transaction approved');
+      fetchData();
+    } catch (error) {
+      toast.error('Failed to approve transaction');
+    }
+  };
+
+  const handleRejectTransaction = async (id) => {
+    try {
+      await axios.put(`/api/admin/transactions/${id}`, { status: 'rejected' });
+      toast.success('Transaction rejected');
+      fetchData();
+    } catch (error) {
+      toast.error('Failed to reject transaction');
+    }
+  };
+
+  const handleUpdatePlan = async (planId, updates) => {
+    try {
+      await axios.put(`/api/plans/${planId}`, updates);
+      toast.success('Plan updated successfully');
+      setEditingPlan(null);
+      fetchData();
+    } catch (error) {
+      toast.error('Failed to update plan');
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen pt-20 flex items-center justify-center">
+        <div className="loading-spinner" />
+      </div>
+    );
+  }
+
+  const tabs = [
+    { id: 'overview', label: 'Overview', icon: Shield },
+    { id: 'users', label: 'Users', icon: Users },
+    { id: 'transactions', label: 'Transactions', icon: DollarSign },
+    { id: 'plans', label: 'Plans', icon: TrendingUp }
+  ];
+
+  return (
+    <div className="min-h-screen pt-20 pb-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8">
+          <div>
+            <h1 className="text-3xl font-bold mb-2">Admin Dashboard</h1>
+            <p className="text-gray-400">Manage users, transactions, and investment plans</p>
+          </div>
+          <button
+            onClick={fetchData}
+            className="mt-4 md:mt-0 p-2 glass-card hover:border-blue-500/40 transition-all"
+          >
+            <RefreshCw className="w-5 h-5 text-gray-400" />
+          </button>
+        </div>
+
+        <div className="flex space-x-2 mb-8 overflow-x-auto">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center space-x-2 px-4 py-2 rounded-lg whitespace-nowrap transition-all ${
+                activeTab === tab.id
+                  ? 'bg-blue-600 text-white'
+                  : 'glass-card text-gray-400 hover:text-white'
+              }`}
+            >
+              <tab.icon className="w-4 h-4" />
+              <span>{tab.label}</span>
+            </button>
+          ))}
+        </div>
+
+        {activeTab === 'overview' && (
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="glass-card p-6"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <Users className="w-8 h-8 text-blue-400" />
+                <span className="text-sm text-gray-400">Total</span>
+              </div>
+              <h3 className="text-2xl font-bold">{stats?.totalUsers || 0}</h3>
+              <p className="text-gray-400 text-sm">Registered Users</p>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="glass-card p-6"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <DollarSign className="w-8 h-8 text-green-400" />
+                <span className="text-sm text-gray-400">Total</span>
+              </div>
+              <h3 className="text-2xl font-bold">${stats?.totalDeposits?.toLocaleString() || 0}</h3>
+              <p className="text-gray-400 text-sm">Deposits</p>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="glass-card p-6"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <TrendingUp className="w-8 h-8 text-purple-400" />
+                <span className="text-sm text-gray-400">Total</span>
+              </div>
+              <h3 className="text-2xl font-bold">${stats?.totalInvestments?.toLocaleString() || 0}</h3>
+              <p className="text-gray-400 text-sm">Investments</p>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="glass-card p-6"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <AlertCircle className="w-8 h-8 text-yellow-400" />
+                <span className="text-sm text-gray-400">Pending</span>
+              </div>
+              <h3 className="text-2xl font-bold">{stats?.pendingTransactions || 0}</h3>
+              <p className="text-gray-400 text-sm">Transactions</p>
+            </motion.div>
+          </div>
+        )}
+
+        {activeTab === 'users' && (
+          <div className="glass-card overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-800/50">
+                  <tr>
+                    <th className="text-left p-4 text-gray-400 font-medium">User</th>
+                    <th className="text-left p-4 text-gray-400 font-medium">Balance</th>
+                    <th className="text-left p-4 text-gray-400 font-medium">Investments</th>
+                    <th className="text-left p-4 text-gray-400 font-medium">Joined</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.map((user) => (
+                    <tr key={user._id} className="border-t border-gray-800">
+                      <td className="p-4">
+                        <div>
+                          <p className="font-medium">{user.firstName} {user.lastName}</p>
+                          <p className="text-sm text-gray-400">{user.email}</p>
+                        </div>
+                      </td>
+                      <td className="p-4">${user.balance.toLocaleString()}</td>
+                      <td className="p-4">{user.activeInvestments?.length || 0}</td>
+                      <td className="p-4 text-gray-400">
+                        {new Date(user.createdAt).toLocaleDateString()}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'transactions' && (
+          <div className="glass-card overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-800/50">
+                  <tr>
+                    <th className="text-left p-4 text-gray-400 font-medium">User</th>
+                    <th className="text-left p-4 text-gray-400 font-medium">Type</th>
+                    <th className="text-left p-4 text-gray-400 font-medium">Amount</th>
+                    <th className="text-left p-4 text-gray-400 font-medium">Status</th>
+                    <th className="text-left p-4 text-gray-400 font-medium">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {transactions.map((transaction) => (
+                    <tr key={transaction._id} className="border-t border-gray-800">
+                      <td className="p-4">
+                        <p className="text-sm">{transaction.user?.email}</p>
+                      </td>
+                      <td className="p-4 capitalize">{transaction.type}</td>
+                      <td className="p-4">${transaction.amount.toLocaleString()}</td>
+                      <td className="p-4">
+                        <span className={`px-2 py-1 rounded text-xs ${
+                          transaction.status === 'completed' ? 'bg-green-500/20 text-green-400' :
+                          transaction.status === 'pending' ? 'bg-yellow-500/20 text-yellow-400' :
+                          'bg-red-500/20 text-red-400'
+                        }`}>
+                          {transaction.status}
+                        </span>
+                      </td>
+                      <td className="p-4">
+                        {transaction.status === 'pending' && (
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => handleApproveTransaction(transaction._id)}
+                              className="p-1 bg-green-500/20 text-green-400 rounded hover:bg-green-500/30"
+                            >
+                              <CheckCircle2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleRejectTransaction(transaction._id)}
+                              className="p-1 bg-red-500/20 text-red-400 rounded hover:bg-red-500/30"
+                            >
+                              <XCircle className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'plans' && (
+          <div className="space-y-6">
+            {plans.map((plan) => (
+              <motion.div
+                key={plan._id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="glass-card p-6"
+              >
+                {editingPlan === plan._id ? (
+                  <div className="space-y-4">
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm text-gray-400 mb-1">Plan Name</label>
+                        <input
+                          type="text"
+                          defaultValue={plan.name}
+                          id={`name-${plan._id}`}
+                          className="input-field"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm text-gray-400 mb-1">Minimum Amount ($)</label>
+                        <input
+                          type="number"
+                          defaultValue={plan.minimumAmount}
+                          id={`min-${plan._id}`}
+                          className="input-field"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm text-gray-400 mb-1">Duration (days)</label>
+                        <input
+                          type="number"
+                          defaultValue={plan.duration}
+                          id={`duration-${plan._id}`}
+                          className="input-field"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm text-gray-400 mb-1">Daily Return (%)</label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          defaultValue={plan.dailyReturn}
+                          id={`return-${plan._id}`}
+                          className="input-field"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={() => handleUpdatePlan(plan._id, {
+                          name: document.getElementById(`name-${plan._id}`).value,
+                          minimumAmount: Number(document.getElementById(`min-${plan._id}`).value),
+                          duration: Number(document.getElementById(`duration-${plan._id}`).value),
+                          dailyReturn: Number(document.getElementById(`return-${plan._id}`).value)
+                        })}
+                        className="flex items-center space-x-2 px-4 py-2 bg-blue-600 rounded-lg hover:bg-blue-700"
+                      >
+                        <Save className="w-4 h-4" />
+                        <span>Save</span>
+                      </button>
+                      <button
+                        onClick={() => setEditingPlan(null)}
+                        className="flex items-center space-x-2 px-4 py-2 border border-gray-600 rounded-lg hover:bg-gray-800"
+                      >
+                        <X className="w-4 h-4" />
+                        <span>Cancel</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-xl font-bold mb-2">{plan.name}</h3>
+                      <div className="flex space-x-4 text-sm text-gray-400">
+                        <span>Min: ${plan.minimumAmount.toLocaleString()}</span>
+                        <span>Duration: {plan.duration} days</span>
+                        <span>Return: {plan.dailyReturn}% daily</span>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setEditingPlan(plan._id)}
+                      className="p-2 hover:bg-gray-800 rounded-lg transition-colors"
+                    >
+                      <Edit3 className="w-5 h-5 text-gray-400" />
+                    </button>
+                  </div>
+                )}
+              </motion.div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default Admin;
